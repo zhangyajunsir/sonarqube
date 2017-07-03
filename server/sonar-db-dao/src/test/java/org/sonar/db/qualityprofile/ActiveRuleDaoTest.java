@@ -19,8 +19,11 @@
  */
 package org.sonar.db.qualityprofile;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -578,4 +581,85 @@ public class ActiveRuleDaoTest {
       .containsOnly(entry(profile1.getKee(), 1L));
   }
 
+  @Test
+  public void countActiveRulesForInheritanceByProfileKey_returns_empty_map_if_profile_does_not_have_rules_with_specified_status() {
+    Map<String, Long> counts = underTest.countActiveRulesForInheritanceByProfileUuid(dbSession, organization, ActiveRuleDto.OVERRIDES);
+
+    assertThat(counts).isEmpty();
+  }
+
+  @Test
+  public void countActiveRulesForInheritanceByProfileKey_ignores_removed_rules() {
+    db.qualityProfiles().activateRule(profile1, rule1, ar -> ar.setInheritance(ActiveRuleDto.OVERRIDES));
+    db.qualityProfiles().activateRule(profile1, removedRule, ar -> ar.setInheritance(ActiveRuleDto.OVERRIDES));
+
+    Map<String, Long> counts = underTest.countActiveRulesForInheritanceByProfileUuid(dbSession, organization, ActiveRuleDto.OVERRIDES);
+
+    assertThat(counts).containsOnly(entry(profile1.getKee(), 1L));
+  }
+
+  @Test
+  public void scrollAllForIndexing_empty_table() {
+    Accumulator accumulator = new Accumulator();
+    underTest.scrollAllForIndexing(dbSession, accumulator);
+    assertThat(accumulator.list).isEmpty();
+  }
+
+  @Test
+  public void scrollAllForIndexing() {
+    ActiveRuleDto ar1 = db.qualityProfiles().activateRule(profile1, rule1);
+    ActiveRuleDto ar2 = db.qualityProfiles().activateRule(profile2, rule1);
+    ActiveRuleDto ar3 = db.qualityProfiles().activateRule(profile2, rule2);
+
+    Accumulator accumulator = new Accumulator();
+    underTest.scrollAllForIndexing(dbSession, accumulator);
+    assertThat(accumulator.list)
+      .extracting(IndexedActiveRuleDto::getId, IndexedActiveRuleDto::getRepository, IndexedActiveRuleDto::getKey, IndexedActiveRuleDto::getRuleProfileUuid,
+        IndexedActiveRuleDto::getSeverity, IndexedActiveRuleDto::getInheritance)
+      .containsExactlyInAnyOrder(
+        tuple((long)ar1.getId(), ar1.getRuleKey().repository(), ar1.getRuleKey().rule(), profile1.getRulesProfileUuid(), ar1.getSeverity(), ar1.getInheritance()),
+        tuple((long)ar2.getId(), ar2.getRuleKey().repository(), ar2.getRuleKey().rule(), profile2.getRulesProfileUuid(), ar2.getSeverity(), ar2.getInheritance()),
+        tuple((long)ar3.getId(), ar3.getRuleKey().repository(), ar3.getRuleKey().rule(), profile2.getRulesProfileUuid(), ar3.getSeverity(), ar3.getInheritance()));
+  }
+
+  @Test
+  public void scrollByIdsForIndexing() {
+    ActiveRuleDto ar1 = db.qualityProfiles().activateRule(profile1, rule1);
+    ActiveRuleDto ar2 = db.qualityProfiles().activateRule(profile2, rule1);
+    ActiveRuleDto ar3 = db.qualityProfiles().activateRule(profile2, rule2);
+
+    Accumulator accumulator = new Accumulator();
+    underTest.scrollByIdsForIndexing(dbSession, asList((long)ar1.getId(), (long)ar2.getId()), accumulator);
+    assertThat(accumulator.list)
+      .extracting(IndexedActiveRuleDto::getId, IndexedActiveRuleDto::getRepository, IndexedActiveRuleDto::getKey, IndexedActiveRuleDto::getRuleProfileUuid,
+        IndexedActiveRuleDto::getSeverity)
+      .containsExactlyInAnyOrder(
+        tuple((long)ar1.getId(), ar1.getRuleKey().repository(), ar1.getRuleKey().rule(), profile1.getRulesProfileUuid(), ar1.getSeverity()),
+        tuple((long)ar2.getId(), ar2.getRuleKey().repository(), ar2.getRuleKey().rule(), profile2.getRulesProfileUuid(), ar2.getSeverity()));
+  }
+
+  @Test
+  public void scrollByRuleProfileForIndexing() {
+    ActiveRuleDto ar1 = db.qualityProfiles().activateRule(profile1, rule1);
+    ActiveRuleDto ar2 = db.qualityProfiles().activateRule(profile2, rule1);
+    ActiveRuleDto ar3 = db.qualityProfiles().activateRule(profile2, rule2);
+
+    Accumulator accumulator = new Accumulator();
+    underTest.scrollByRuleProfileForIndexing(dbSession, profile2.getRulesProfileUuid(), accumulator);
+    assertThat(accumulator.list)
+      .extracting(IndexedActiveRuleDto::getId, IndexedActiveRuleDto::getRepository, IndexedActiveRuleDto::getKey, IndexedActiveRuleDto::getRuleProfileUuid,
+        IndexedActiveRuleDto::getSeverity)
+      .containsExactlyInAnyOrder(
+        tuple((long)ar2.getId(), ar2.getRuleKey().repository(), ar2.getRuleKey().rule(), profile2.getRulesProfileUuid(), ar2.getSeverity()),
+        tuple((long)ar3.getId(), ar3.getRuleKey().repository(), ar3.getRuleKey().rule(), profile2.getRulesProfileUuid(), ar3.getSeverity()));
+  }
+
+  private static class Accumulator implements Consumer<IndexedActiveRuleDto> {
+    private final List<IndexedActiveRuleDto> list = new ArrayList<>();
+
+    @Override
+    public void accept(IndexedActiveRuleDto dto) {
+      list.add(dto);
+    }
+  }
 }
