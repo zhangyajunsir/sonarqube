@@ -40,6 +40,7 @@ type Props = {
 };
 
 type State = {
+  selectedDate?: ?Date,
   graphStartDate: ?Date,
   graphEndDate: ?Date,
   series: Array<Serie>
@@ -97,6 +98,8 @@ export default class ProjectActivityGraphs extends React.PureComponent {
     }
   };
 
+  updateSelectedDate = (selectedDate: ?Date) => this.setState({ selectedDate });
+
   updateGraphZoom = (graphStartDate: ?Date, graphEndDate: ?Date) => {
     if (graphEndDate != null && graphStartDate != null) {
       const msDiff = Math.abs(graphEndDate.valueOf() - graphStartDate.valueOf());
@@ -134,9 +137,11 @@ export default class ProjectActivityGraphs extends React.PureComponent {
           loading={loading}
           metricsType={metricsType}
           project={this.props.project}
+          selectedDate={this.state.selectedDate}
           series={series}
           showAreas={['coverage', 'duplications'].includes(query.graph)}
           updateGraphZoom={this.updateGraphZoom}
+          updateSelectedDate={this.updateSelectedDate}
         />
         <GraphsZoom
           graphEndDate={this.state.graphEndDate}

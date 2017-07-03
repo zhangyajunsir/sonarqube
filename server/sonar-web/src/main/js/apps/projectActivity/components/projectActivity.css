@@ -62,6 +62,14 @@
   text-align: center;
 }
 
+.project-activity-graph-tooltip {
+  padding: 8px;
+}
+
+.project-activity-graph-tooltip-title, .project-activity-graph-tooltip-value {
+  font-weight: bold;
+}
+
 .project-activity-days-list {}
 
 .project-activity-day {
