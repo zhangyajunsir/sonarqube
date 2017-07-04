@@ -21,7 +21,6 @@ package org.sonar.db.qualityprofile;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 import org.junit.Before;
@@ -579,23 +578,6 @@ public class ActiveRuleDaoTest {
     assertThat(underTest.countActiveRulesByQuery(dbSession,
       ActiveRuleCountQuery.builder().setOrganization(organization).setProfiles(asList(profile1, profileOnAnotherOrganization)).build()))
       .containsOnly(entry(profile1.getKee(), 1L));
-  }
-
-  @Test
-  public void countActiveRulesForInheritanceByProfileKey_returns_empty_map_if_profile_does_not_have_rules_with_specified_status() {
-    Map<String, Long> counts = underTest.countActiveRulesForInheritanceByProfileUuid(dbSession, organization, ActiveRuleDto.OVERRIDES);
-
-    assertThat(counts).isEmpty();
-  }
-
-  @Test
-  public void countActiveRulesForInheritanceByProfileKey_ignores_removed_rules() {
-    db.qualityProfiles().activateRule(profile1, rule1, ar -> ar.setInheritance(ActiveRuleDto.OVERRIDES));
-    db.qualityProfiles().activateRule(profile1, removedRule, ar -> ar.setInheritance(ActiveRuleDto.OVERRIDES));
-
-    Map<String, Long> counts = underTest.countActiveRulesForInheritanceByProfileUuid(dbSession, organization, ActiveRuleDto.OVERRIDES);
-
-    assertThat(counts).containsOnly(entry(profile1.getKee(), 1L));
   }
 
   @Test
