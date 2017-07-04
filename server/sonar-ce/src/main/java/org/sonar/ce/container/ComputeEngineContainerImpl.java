@@ -47,6 +47,7 @@ import org.sonar.ce.CeTaskCommonsModule;
 import org.sonar.ce.StandaloneCeDistributedInformation;
 import org.sonar.ce.cleaning.CeCleaningModule;
 import org.sonar.ce.cluster.HazelcastClientWrapperImpl;
+import org.sonar.ce.configuration.CeWorkerCountSettingWarning;
 import org.sonar.ce.db.ReadOnlyPropertiesDao;
 import org.sonar.ce.log.CeProcessLogging;
 import org.sonar.ce.platform.ComputeEngineExtensionInstaller;
@@ -181,12 +182,10 @@ public class ComputeEngineContainerImpl implements ComputeEngineContainer {
     if (props.valueAsBoolean("sonar.cluster.enabled")) {
       this.level4.add(
         HazelcastClientWrapperImpl.class,
-        CeDistributedInformationImpl.class
-      );
+        CeDistributedInformationImpl.class);
     } else {
       this.level4.add(
-        StandaloneCeDistributedInformation.class
-      );
+        StandaloneCeDistributedInformation.class);
     }
     configureFromModules(this.level4);
     ServerExtensionInstaller extensionInstaller = this.level4.getComponentByType(ServerExtensionInstaller.class);
@@ -418,7 +417,8 @@ public class ComputeEngineContainerImpl implements ComputeEngineContainer {
       LogServerId.class,
       ServerLifecycleNotifier.class,
       PurgeCeActivities.class,
-      CeQueueCleaner.class
+      CeQueueCleaner.class,
+      CeWorkerCountSettingWarning.class
     };
   }
 

@@ -36,6 +36,8 @@ import org.sonar.api.CoreProperties;
 import org.sonar.api.database.DatabaseProperties;
 import org.sonar.api.utils.DateUtils;
 import org.sonar.api.utils.System2;
+import org.sonar.api.utils.log.LogTester;
+import org.sonar.api.utils.log.LoggerLevel;
 import org.sonar.ce.CeDistributedInformationImpl;
 import org.sonar.ce.StandaloneCeDistributedInformation;
 import org.sonar.ce.cluster.HazelcastClientWrapperImpl;
@@ -64,6 +66,8 @@ public class ComputeEngineContainerImplTest {
   public TemporaryFolder tempFolder = new TemporaryFolder();
   @Rule
   public DbTester dbTester = DbTester.create(System2.INSTANCE);
+  @Rule
+  public LogTester logTester = new LogTester();
 
   private ComputeEngineContainerImpl underTest = new ComputeEngineContainerImpl();
 
@@ -151,6 +155,26 @@ public class ComputeEngineContainerImplTest {
     assertThat(picoContainer.getLifecycleState().isStarted()).isFalse();
     assertThat(picoContainer.getLifecycleState().isStopped()).isFalse();
     assertThat(picoContainer.getLifecycleState().isDisposed()).isTrue();
+  }
+
+  @Test
+  public void real_start_with_ceWorkerCount_property_defined_logs_a_warning() throws IOException {
+
+    Properties properties = getProperties();
+    properties.put("sonar.ce.workerCount", "5");
+
+    // required persisted properties
+    insertProperty(CoreProperties.SERVER_ID, "a_startup_id");
+    insertProperty(CoreProperties.SERVER_STARTTIME, DateUtils.formatDateTime(new Date()));
+
+    underTest.start(new Props(properties));
+
+    assertThat(logTester.logs(LoggerLevel.WARN).stream()
+      .filter(str -> str.equals("Property sonar.ce.workerCount is not supported anymore and will be ignored." +
+        " Remove it from sonar.properties to remove this warning.")))
+          .hasSize(1);
+
+    underTest.stop();
   }
 
   private Properties getProperties() throws IOException {
