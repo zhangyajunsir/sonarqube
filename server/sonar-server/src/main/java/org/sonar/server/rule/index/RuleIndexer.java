@@ -22,7 +22,6 @@ package org.sonar.server.rule.index;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ListMultimap;
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import org.elasticsearch.action.index.IndexRequest;
@@ -69,24 +68,27 @@ public class RuleIndexer implements StartupIndexer, ResilientIndexer {
 
   @Override
   public void indexOnStartup(Set<IndexType> uninitializedIndexTypes) {
-    BulkIndexer bulk = createBulkIndexer(Size.LARGE, IndexingListener.noop());
-    bulk.start();
+    try (DbSession dbSession = dbClient.openSession(false)) {
+      BulkIndexer bulk = createBulkIndexer(Size.LARGE, IndexingListener.noop());
+      bulk.start();
 
-    // index all definitions and system extensions
-    if (uninitializedIndexTypes.contains(INDEX_TYPE_RULE)) {
-      try (RuleIterator rules = new RuleIteratorForSingleChunk(dbClient, null)) {
-        doIndexRuleDefinitions(rules, bulk);
+      // index all definitions and system extensions
+      if (uninitializedIndexTypes.contains(INDEX_TYPE_RULE)) {
+        dbClient.ruleDao().scrollIndexingRules(dbSession, dto -> {
+          bulk.add(newRuleDocIndexRequest(dto));
+          bulk.add(newRuleExtensionDocIndexRequest(dto));
+        });
       }
-    }
 
-    // index all organization extensions
-    if (uninitializedIndexTypes.contains(INDEX_TYPE_RULE_EXTENSION)) {
-      try (RuleMetadataIterator metadatas = new RuleMetadataIterator(dbClient)) {
-        doIndexRuleExtensions(metadatas, bulk);
+      // index all organization extensions
+      if (uninitializedIndexTypes.contains(INDEX_TYPE_RULE_EXTENSION)) {
+        dbClient.ruleDao().scrollIndexingRuleExtensions(dbSession, dto -> {
+          bulk.add(newRuleExtensionDocIndexRequest(dto));
+        });
       }
-    }
 
-    bulk.stop();
+      bulk.stop();
+    }
   }
 
   public void commitAndIndex(DbSession dbSession, RuleKey ruleKey) {
@@ -152,7 +154,7 @@ public class RuleIndexer implements StartupIndexer, ResilientIndexer {
       .map(i -> RuleKey.parse(i.getDocId()))
       .collect(toHashSet(items.size()));
 
-    dbClient.ruleDao().scrollRuleByRuleKeys(dbSession, rules,
+    dbClient.ruleDao().scrollIndexingRulesByKeys(dbSession, rules,
       // only index requests, no deletion requests.
       // Deactivated users are not deleted but updated.
       r -> {
@@ -182,7 +184,7 @@ public class RuleIndexer implements StartupIndexer, ResilientIndexer {
       .map(RuleIndexer::explodeRuleExtensionDocId)
       .collect(toHashSet(items.size()));
 
-    dbClient.ruleDao().scrollRuleExtensionByRuleKeys(dbSession, docIds,
+    dbClient.ruleDao().scrollIndexingRuleExtensionsByIds(dbSession, docIds,
       // only index requests, no deletion requests.
       // Deactivated users are not deleted but updated.
       r -> {
@@ -197,57 +199,32 @@ public class RuleIndexer implements StartupIndexer, ResilientIndexer {
     return bulkIndexer.stop();
   }
 
-  private static void doIndexRuleDefinitions(Iterator<RuleDocWithSystemScope> rules, BulkIndexer bulk) {
-    while (rules.hasNext()) {
-      RuleDocWithSystemScope ruleWithExtension = rules.next();
-      bulk.add(newIndexRequest(ruleWithExtension.getRuleDoc()));
-      bulk.add(newIndexRequest(ruleWithExtension.getRuleExtensionDoc()));
-    }
-  }
-
-  private static void doIndexRuleExtensions(Iterator<RuleExtensionDoc> metadatas, BulkIndexer bulk) {
-    while (metadatas.hasNext()) {
-      RuleExtensionDoc metadata = metadatas.next();
-      bulk.add(newIndexRequest(metadata));
-    }
-  }
-
-  private static IndexRequest newIndexRequest(RuleDoc rule) {
-    return new IndexRequest(INDEX_TYPE_RULE.getIndex(), INDEX_TYPE_RULE.getType())
-      .id(rule.getId())
-      .routing(rule.getRouting())
-      .source(rule.getFields());
-  }
-
-  private static IndexRequest newIndexRequest(RuleExtensionDoc ruleExtension) {
-    return new IndexRequest(INDEX_TYPE_RULE_EXTENSION.getIndex(), INDEX_TYPE_RULE_EXTENSION.getType())
-      .id(ruleExtension.getId())
-      .routing(ruleExtension.getRouting())
-      .source(ruleExtension.getFields())
-      .parent(ruleExtension.getParent());
-  }
-
   private static IndexRequest newRuleDocIndexRequest(RuleForIndexingDto ruleForIndexingDto) {
-    RuleDoc ruleDoc = RuleDoc.of(ruleForIndexingDto);
+    RuleDoc doc = RuleDoc.of(ruleForIndexingDto);
 
-    return new IndexRequest(INDEX_TYPE_RULE.getIndex(), INDEX_TYPE_RULE.getType(), ruleDoc.key().toString())
-      .source(ruleDoc.getFields());
+    return new IndexRequest(INDEX_TYPE_RULE.getIndex(), INDEX_TYPE_RULE.getType())
+      .id(doc.key().toString())
+      .routing(doc.getRouting())
+      .source(doc.getFields());
   }
 
   private static IndexRequest newRuleExtensionDocIndexRequest(RuleForIndexingDto ruleForIndexingDto) {
     RuleExtensionDoc ruleExtensionDoc = RuleExtensionDoc.of(ruleForIndexingDto);
 
-    return new IndexRequest(INDEX_TYPE_RULE_EXTENSION.getIndex(), INDEX_TYPE_RULE_EXTENSION.getType(), ruleExtensionDoc.getId())
-      .source(ruleExtensionDoc.getFields())
-      .parent(ruleExtensionDoc.getParent());
+    return new IndexRequest(INDEX_TYPE_RULE_EXTENSION.getIndex(), INDEX_TYPE_RULE_EXTENSION.getType())
+      .id(ruleExtensionDoc.getId())
+      .routing(ruleExtensionDoc.getRouting())
+      .parent(ruleExtensionDoc.getParent())
+      .source(ruleExtensionDoc.getFields());
   }
 
   private static IndexRequest newRuleExtensionDocIndexRequest(RuleExtensionForIndexingDto ruleExtensionForIndexingDto) {
-    RuleExtensionDoc ruleExtensionDoc = RuleExtensionDoc.of(ruleExtensionForIndexingDto);
-
-    return new IndexRequest(INDEX_TYPE_RULE_EXTENSION.getIndex(), INDEX_TYPE_RULE_EXTENSION.getType(), ruleExtensionDoc.getId())
-      .source(ruleExtensionDoc.getFields())
-      .parent(ruleExtensionDoc.getParent());
+    RuleExtensionDoc doc = RuleExtensionDoc.of(ruleExtensionForIndexingDto);
+    return new IndexRequest(INDEX_TYPE_RULE_EXTENSION.getIndex(), INDEX_TYPE_RULE_EXTENSION.getType())
+      .id(doc.getId())
+      .routing(doc.getRouting())
+      .parent(doc.getParent())
+      .source(doc.getFields());
   }
 
   private BulkIndexer createBulkIndexer(Size bulkSize, IndexingListener listener) {
