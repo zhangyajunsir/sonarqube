@@ -23,9 +23,9 @@ import java.util.Random;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
-import org.sonar.api.config.MapSettings;
-import org.sonar.api.config.Settings;
 import org.sonar.api.utils.MessageException;
+import org.sonar.server.property.InternalProperties;
+import org.sonar.server.property.MapInternalProperties;
 
 import static java.lang.Math.abs;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,7 +36,7 @@ public class CeConfigurationImplTest {
   @Rule
   public ExpectedException expectedException = ExpectedException.none();
 
-  private Settings settings = new MapSettings();
+  private InternalProperties settings = new MapInternalProperties();
 
   @Test
   public void getWorkerCount_returns_1_when_worker_property_is_not_defined() {
@@ -45,21 +45,21 @@ public class CeConfigurationImplTest {
 
   @Test
   public void getWorkerCount_returns_1_when_worker_property_is_empty() {
-    settings.setProperty(CE_WORKERS_COUNT_PROPERTY, "");
+    settings.write(CE_WORKERS_COUNT_PROPERTY, "");
 
     assertThat(new CeConfigurationImpl(settings).getWorkerCount()).isEqualTo(1);
   }
 
   @Test
   public void getWorkerCount_returns_1_when_worker_property_is_space_chars() {
-    settings.setProperty(CE_WORKERS_COUNT_PROPERTY, "  \n  ");
+    settings.write(CE_WORKERS_COUNT_PROPERTY, "  \n  ");
 
     assertThat(new CeConfigurationImpl(settings).getWorkerCount()).isEqualTo(1);
   }
 
   @Test
   public void getWorkerCount_returns_1_when_worker_property_is_1() {
-    settings.setProperty(CE_WORKERS_COUNT_PROPERTY, 1);
+    settings.write(CE_WORKERS_COUNT_PROPERTY, String.valueOf(1));
 
     assertThat(new CeConfigurationImpl(settings).getWorkerCount()).isEqualTo(1);
   }
@@ -67,7 +67,7 @@ public class CeConfigurationImplTest {
   @Test
   public void getWorkerCount_returns_value_when_worker_property_is_integer_greater_than_1() {
     int value = abs(new Random().nextInt()) + 2;
-    settings.setProperty(CE_WORKERS_COUNT_PROPERTY, value);
+    settings.write(CE_WORKERS_COUNT_PROPERTY, String.valueOf(value));
 
     assertThat(new CeConfigurationImpl(settings).getWorkerCount()).isEqualTo(value);
   }
@@ -75,7 +75,7 @@ public class CeConfigurationImplTest {
   @Test
   public void constructor_throws_MessageException_when_worker_property_is_0() {
     int value = 0;
-    settings.setProperty(CE_WORKERS_COUNT_PROPERTY, String.valueOf(value));
+    settings.write(CE_WORKERS_COUNT_PROPERTY, String.valueOf(value));
 
     expectMessageException(value);
 
@@ -85,7 +85,7 @@ public class CeConfigurationImplTest {
   @Test
   public void constructor_throws_MessageException_when_worker_property_is_less_than_0() {
     int value = -1 * abs(new Random().nextInt());
-    settings.setProperty(CE_WORKERS_COUNT_PROPERTY, String.valueOf(value));
+    settings.write(CE_WORKERS_COUNT_PROPERTY, String.valueOf(value));
 
     expectMessageException(value);
 
@@ -93,9 +93,9 @@ public class CeConfigurationImplTest {
   }
 
   @Test
-  public void constructor_throws_MessageException_when_worker_property_is_not_an_double() {
+  public void constructor_throws_MessageException_when_worker_property_is_a_double() {
     double value = 3.5;
-    settings.setProperty(CE_WORKERS_COUNT_PROPERTY, String.valueOf(value));
+    settings.write(CE_WORKERS_COUNT_PROPERTY, String.valueOf(value));
 
     expectedException.expect(MessageException.class);
     expectedException.expectMessage("value '" + value + "' of property " + CE_WORKERS_COUNT_PROPERTY + " is invalid. " +

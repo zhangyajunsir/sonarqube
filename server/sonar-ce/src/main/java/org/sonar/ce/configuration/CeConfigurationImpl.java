@@ -20,10 +20,10 @@
 package org.sonar.ce.configuration;
 
 import org.picocontainer.Startable;
-import org.sonar.api.config.Settings;
 import org.sonar.api.utils.MessageException;
 import org.sonar.api.utils.log.Logger;
 import org.sonar.api.utils.log.Loggers;
+import org.sonar.server.property.InternalProperties;
 
 import static java.lang.String.format;
 
@@ -47,16 +47,17 @@ public class CeConfigurationImpl implements CeConfiguration, Startable {
 
   private final int workerCount;
 
-  public CeConfigurationImpl(Settings settings) {
-    String workerCountAsStr = settings.getString(CE_WORKERS_COUNT_PROPERTY);
-    if (workerCountAsStr == null || workerCountAsStr.isEmpty()) {
-      this.workerCount = DEFAULT_WORKER_COUNT;
-    } else {
-      this.workerCount = parseStringValue(workerCountAsStr);
-    }
+  public CeConfigurationImpl(InternalProperties internalProperties) {
+    this.workerCount = internalProperties.read(CE_WORKERS_COUNT_PROPERTY)
+      .map(String::trim)
+      .map(CeConfigurationImpl::parseStringValue)
+      .orElse(DEFAULT_WORKER_COUNT);
   }
 
   private static int parseStringValue(String workerCountAsStr) {
+    if (workerCountAsStr.isEmpty()) {
+      return DEFAULT_WORKER_COUNT;
+    }
     try {
       int value = Integer.parseInt(workerCountAsStr);
       if (value < 1) {
@@ -72,8 +73,7 @@ public class CeConfigurationImpl implements CeConfiguration, Startable {
     return MessageException.of(format(
       "value '%s' of property %s is invalid. It must an integer strictly greater than 0.",
       workerCountAsStr,
-      CE_WORKERS_COUNT_PROPERTY)
-      );
+      CE_WORKERS_COUNT_PROPERTY));
   }
 
   @Override
